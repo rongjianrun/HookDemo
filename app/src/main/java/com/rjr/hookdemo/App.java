@@ -14,5 +14,6 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         HookUtil.getInstance(this).hookAms();
+        HookUtil.getInstance(this).hookSysHandler();
     }
 }
