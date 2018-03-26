@@ -1,52 +1,48 @@
 package com.rjr.hookdemo.utils;
 
 import android.content.Context;
+import android.util.Log;
 
 import java.lang.reflect.Field;
 
 /**
- * Created by Administrator on 2018/3/23.
+ * Created by Administrator on 2018/3/26.
  */
 
 public class HookUtil {
-    private static HookUtil ourInstance;
-    private Context context;
+
+    private static final String TAG = "rong";
+    private static HookUtil instance;
+
+    private Context mContext;
 
     public static HookUtil getInstance(Context context) {
-        if (ourInstance == null) {
-            ourInstance = new HookUtil(context);
+        if (instance == null) {
+            instance = new HookUtil(context);
         }
-        return ourInstance;
+        return instance;
     }
 
     private HookUtil(Context context) {
-        this.context = context;
+        mContext = context;
     }
 
-    public void fun() {
-        // 一路反射，直到拿到IActivityManager对象
+    public void hookAms() {
         try {
-            Class<?> amClass = Class.forName("android.app.ActivityManager");
-            Field iamField = amClass.getField("IActivityManagerSingleton");
+            Class<?> amnClass = Class.forName("android.app.ActivityManagerNative");
+            Field gDefaultField = amnClass.getDeclaredField("gDefault");
+            gDefaultField.setAccessible(true);
+            // 反射拿到singleton对象
+            Object singletonObj = gDefaultField.get(null);
+            Class<?> singletonClass = Class.forName("android.util.Singleton");
+            Field iamField = singletonClass.getDeclaredField("mInstance");
             iamField.setAccessible(true);
-            Object iamObj = iamField.get(null);
-            // 反射拿到IActivityManager对象
-            Class<?> singleClass = Class.forName("android.util.Singleton");
-            Field insField = singleClass.getField("mInstance");
-            insField.setAccessible(true);
-            Object o = insField.get(iamObj);
+            // 反射拿到IActivityManager对象，真正调用startActivity的对象
+            Object iActivityManager = iamField.get(singletonObj);
+
         } catch (Exception e) {
             e.printStackTrace();
+            Log.e(TAG, "hookAms: ", e);
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
