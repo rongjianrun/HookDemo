@@ -14,53 +14,63 @@
         }
         点击跳转按钮，就会调用系统的startActivity方法，寻着这个方法，可以深入了解到底是哪个对象启动activity的，根据
         对源码的追踪分析，最终调用到下面的代码
-        public void startActivityForResult(@RequiresPermission Intent intent, int requestCode,
-                    @Nullable Bundle options) {
-                if (mParent == null) {
-                    options = transferSpringboardActivityOptions(options);
-                    Instrumentation.ActivityResult ar =
-                        mInstrumentation.execStartActivity(
-                            this, mMainThread.getApplicationThread(), mToken, this,
-                            intent, requestCode, options);
-                    if (ar != null) {
-                        mMainThread.sendActivityResult(
-                            mToken, mEmbeddedID, requestCode, ar.getResultCode(),
-                            ar.getResultData());
-                    }
-                    if (requestCode >= 0) {
-                        mStartedActivity = true;
-                    }
-
-                    cancelInputsAndStartExitTransition(options);
-                } else {
-                    if (options != null) {
-                        mParent.startActivityFromChild(this, intent, requestCode, options);
-                    } else {
-                        mParent.startActivityFromChild(this, intent, requestCode);
+        public ActivityResult execStartActivity(
+                    Context who, IBinder contextThread, IBinder token, Activity target,
+                    Intent intent, int requestCode, Bundle options) {
+                IApplicationThread whoThread = (IApplicationThread) contextThread;
+                if (mActivityMonitors != null) {
+                    synchronized (mSync) {
+                        final int N = mActivityMonitors.size();
+                        for (int i=0; i<N; i++) {
+                            final ActivityMonitor am = mActivityMonitors.get(i);
+                            if (am.match(who, null, intent)) {
+                                am.mHits++;
+                                if (am.isBlocking()) {
+                                    return requestCode >= 0 ? am.getResult() : null;
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
-            }
-        上面代码，我们只关注调用了Instrumentation中的execStartActivity这个方法就可以了，这个方法的实现如下；
-        ActivityManager.getService()
+                try {
+                    intent.migrateExtraStreamToClipData();
+                    intent.prepareToLeaveProcess();
+                    // 重点关注这个方法
+                    int result = ActivityManagerNative.getDefault()
                         .startActivity(whoThread, who.getBasePackageName(), intent,
                                 intent.resolveTypeIfNeeded(who.getContentResolver()),
-                                token, target, requestCode, 0, null, options);
-        从代码发现，是IActivityManager的实例调用了跳转的方法，而这个实例是通过以下方法创建的
-        private static final Singleton<IActivityManager> IActivityManagerSingleton =
-                    new Singleton<IActivityManager>() {
-                        @Override
-                        protected IActivityManager create() {
-                            final IBinder b = ServiceManager.getService(Context.ACTIVITY_SERVICE);
-                            final IActivityManager am = IActivityManager.Stub.asInterface(b);
-                            return am;
-                        }
-                    };
+                                token, target != null ? target.mEmbeddedID : null,
+                                requestCode, 0, null, options);
+                    checkStartActivityResult(result, intent);
+                } catch (RemoteException e) {
+                }
+                return null;
+            }
+        上面代码，我们只关注调用了Instrumentation中的execStartActivity这个方法就可以了
+        从代码发现，是ActivityManagerNative.getDefault()调用了跳转的方法，而这个实例是通过以下方法创建的
+        static public IActivityManager getDefault() {
+                return gDefault.get();
+            }
+        private static final Singleton<IActivityManager> gDefault = new Singleton<IActivityManager>() {
+                protected IActivityManager create() {
+                    IBinder b = ServiceManager.getService("activity");
+                    if (false) {
+                        Log.v("ActivityManager", "default service binder = " + b);
+                    }
+                    IActivityManager am = asInterface(b);
+                    if (false) {
+                        Log.v("ActivityManager", "default service = " + am);
+                    }
+                    return am;
+                }
+            };
         到这里，逻辑基本清晰了，实际上是通过获取ams远程服务的binder对象，再通过asInterface转换成本地对象。我们拦截的是
-        startActivity，那改变IActivityManager是一种方法，IActivityManagerSingleton是静态的，符合hook的原则，到此我们就
-        已经找到了一个较好的hook点。
+        startActivity，那改变IActivityManager是一种方法，gDefault是静态的，符合hook的原则，到此我们就已经找到了一个较好
+        的hook点。
 
     3、分析应用到的知识点
-        （1）上面我们看到IActivityManagerSingleton对象是私有的，而要那个这个对象，自然而然就会想到反射技术；
+        （1）上面我们看到gDefault对象是私有的，而要那个这个对象，自然而然就会想到反射技术；
         （2）拿到对象后，我们要拦截里面的方法，再做自己的处理，这就会用到了动态代理。
 
 说完思路，具体的实现逻辑在项目中体现。
