@@ -5,11 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Message;
-import android.os.Parcelable;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.rjr.hookdemo.TempActivity;
+import com.rjr.hookdemo.LoginActivity;
+import com.rjr.hookdemo.ProxyActivity;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
@@ -95,7 +94,7 @@ public class HookUtil {
                 }
                 Intent proxyIntent = new Intent();
                 // 设置代理的intent
-                proxyIntent.setComponent(new ComponentName(mContext, TempActivity.class));
+                proxyIntent.setComponent(new ComponentName(mContext, ProxyActivity.class));
                 // 真正要启动的intent
                 proxyIntent.putExtra("oldIntent", intent);
                 args[index] = proxyIntent;
@@ -142,14 +141,13 @@ public class HookUtil {
             if (msg.what == 100) {
                 // 拦截startActivity方法
                 Log.i(TAG, "handleMessage: startActivity 被拦截");
-                Toast.makeText(mContext, "startActivity 被拦截", Toast.LENGTH_SHORT).show();
-                handleLunchActivity(msg);
+                handleLaunchActivity(msg);
             }
             mH.handleMessage(msg);
-            return false;
+            return true;
         }
 
-        private void handleLunchActivity(Message msg) {
+        private void handleLaunchActivity(Message msg) {
             try {
                 Object obj = msg.obj;
                 Field intentField = obj.getClass().getDeclaredField("intent");
@@ -159,7 +157,11 @@ public class HookUtil {
                 Intent realIntent = proxyIntent.getParcelableExtra("oldIntent");
                 if (realIntent != null) {
                     // 把真正要启动的component设给intent
-                    proxyIntent.setComponent(realIntent.getComponent());
+                    if (LoginManager.getInstance(mContext).isLogin()) {
+                        proxyIntent.setComponent(realIntent.getComponent());
+                    } else {
+                        proxyIntent.setComponent(new ComponentName(mContext, LoginActivity.class));
+                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();

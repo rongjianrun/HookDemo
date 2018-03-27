@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.view.View;
 
+import com.rjr.hookdemo.utils.LoginManager;
+
 public class MainActivity extends BaseActivity {
 
     @Override
@@ -13,7 +15,15 @@ public class MainActivity extends BaseActivity {
         setContentView(R.layout.activity_main);
     }
 
-    public void gotoSecondActivity(View view) {
-        startActivity(new Intent(this, SecondActivity.class));
+    public void toOrder(View view) {
+        startActivity(new Intent(this, OrderActivity.class));
+    }
+
+    public void toShopping(View view) {
+        startActivity(new Intent(this, ShoppingActivity.class));
+    }
+
+    public void logout(View view) {
+        LoginManager.getInstance(this).logout();
     }
 }
